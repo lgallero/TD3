@@ -1,0 +1,28 @@
+# Archivos compilados
+*.o
+*.obj
+*.exe
+*.out
+
+# Directorios de build
+build/
+cmake-build-*/
+
+# IDEs
+.vscode/
+**/.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+gcc.log
+**/gcc.log
+
+# Carpetas output
+output/
+**/output/
+
+# OS
+Thumbs.db
+.DS_Store
