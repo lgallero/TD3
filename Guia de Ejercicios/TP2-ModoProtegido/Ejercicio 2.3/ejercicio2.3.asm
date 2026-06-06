@@ -1,6 +1,8 @@
 ;*******************************************************
-; Ejercicio 2.2 - Manejo de Interrupciones en Modo Protegido
+; Ejercicio 2.3 - Ordenamiento de las Interrupciones
 ;
+; - Reprograma PIC1 y PIC2
+; - IRQ0..IRQ15 pasan a INT 20h..INT 2Fh
 ; - Carga GDT
 ; - Carga IDT
 ; - Entra a modo protegido
@@ -64,11 +66,16 @@ gdtSize equ $-gdt
 ; IDT
 ;***********************************
 idt:
-  ; dejo espacio para INT 0 a INT 8
-  ; el teclado original entra por INT 9h
-  resb 8*9
+  ; ahora el teclado no esta en INT 9h
+  ; porque reprogramamos el PIC:
+  ;
+  ; IRQ0 -> INT 20h
+  ; IRQ1 -> INT 21h
+  ;
+  ; Entonces dejamos vacias las entradas 0 a 20h
+  resb 8*21h
 
-  ; INT 9h - IRQ1 teclado
+  ; INT 21h - IRQ1 teclado
   dw irq1Handler
   dw codeSel0
   db 0
@@ -83,7 +90,51 @@ idtSize equ $-idt
 inicio:
   cli
 
-; cargo GDTR
+;-------------------------------------------------------
+; Reprogramacion de PIC1 y PIC2
+;-------------------------------------------------------
+; PIC Master:
+;   command port = 20h
+;   data port    = 21h
+;
+; PIC Slave:
+;   command port = A0h
+;   data port    = A1h
+;
+; Resultado:
+;   PIC1: IRQ0..IRQ7  -> INT 20h..27h
+;   PIC2: IRQ8..IRQ15 -> INT 28h..2Fh
+;-------------------------------------------------------
+
+; ICW1: inicializacion
+  mov al, 11h
+  out 20h, al
+  out 0A0h, al
+
+; ICW2: base de interrupciones del PIC Master
+  mov al, 20h
+  out 21h, al
+
+; ICW2: base de interrupciones del PIC Slave
+  mov al, 28h
+  out 0A1h, al
+
+; ICW3: el slave esta conectado en IRQ2 del master
+  mov al, 04h
+  out 21h, al
+
+; ICW3: el slave se identifica como IRQ2
+  mov al, 02h
+  out 0A1h, al
+
+; ICW4: modo 8086
+  mov al, 01h
+  out 21h, al
+  out 0A1h, al
+
+;-------------------------------------------------------
+; Cargo GDTR
+;-------------------------------------------------------
   mov ax, gdtSize - 1
   mov [gdtr + 0], ax
 
@@ -91,7 +142,9 @@ inicio:
   mov ax, gdt
   mov [gdtr + 2], eax
 
-; cargo IDTR
+;-------------------------------------------------------
+; Cargo IDTR
+;-------------------------------------------------------
   mov ax, idtSize - 1
   mov [idtr + 0], ax
 
@@ -102,7 +155,9 @@ inicio:
   lgdt [gdtr]
   lidt [idtr]
 
-; paso a modo protegido
+;-------------------------------------------------------
+; Paso a modo protegido
+;-------------------------------------------------------
   mov eax, cr0
   or al, 1
   mov cr0, eax
@@ -134,8 +189,9 @@ modo_protegido:
   call pintar_video_inverso
 
 ; habilito solamente IRQ1, teclado
-; 1111 1101b = FDh
-  mov al, 0FDh
+; aunque el teclado ahora entra por INT 21h,
+; sigue siendo IRQ1 fisicamente.
+  mov al, 0FDh ; 1111 1101 b
   out 21h, al
 
 ; enmascaro todo el PIC Slave
@@ -148,9 +204,9 @@ modo_protegido:
 ; espero interrupciones
   jmp $
 
-;*****************************************
+;***********************************
 ; Rutina: pintar pantalla en video inverso
-;*****************************************
+;***********************************
 pintar_video_inverso:
 
   push ax
@@ -174,7 +230,7 @@ bucle_pantalla:
   ret
 
 ;***********************************
-; Handler de teclado - INT 9h - IRQ1
+; Handler de teclado - INT 21h - IRQ1
 ;***********************************
 irq1Handler:
   cli
@@ -207,15 +263,14 @@ mostrar_contador:
 ; leo contador desde DS:dataSel0
   mov al, [contador]
 
-; convierto a decimal de 2 digitos   AX / Bl  y el resultado se guarda en al = resultado ah el resto 
+; convierto a decimal de 2 digitos
   xor ah, ah
   mov bl, 10
   div bl
 
-; add x , '0' paso de decimal a ascii
 ; AL = decenas
 ; AH = unidades
-  add al, '0' 
+  add al, '0'
   add ah, '0'
 
   mov bl, al
