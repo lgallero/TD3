@@ -1,114 +1,188 @@
-;*********************************************************
-; Ejercicio 2.5 
-; Alumno: Gallero, Lucas
-; Legajo: 25632
-;*********************************************************
-
+;*******************************************************
+; TECNICAS DIGITALES III
+; EJERCICIO 2.5
+; ALUMNO: GALLERO LUCAS
+; LEGAJO: 25632
+;*******************************************************
+; Codigo 16 bits
 use16
+
+; Offset en 0x8000
 org 8000h
 
+; Voy a inicio
 jmp inicio
 
-;*****************************
-;         Variables
-;*****************************
-gdtr      resb 6
-idtr      resb 6
-contador  db 0
+;***********************************
+;       Variables
+;***********************************
+gdtr    resb 6
+idtr    resb 6
 
-; --- Variables nuevas para el Ejercicio 2.5 ---
-prioridad_sup db 5    ; Porcentaje de prioridad superior (50% por defecto)
-ranura        db 0    ; Ruleta del scheduler (0 a 9)
+tecla   db 0
 
-dec_sup       dw 0    ; Décimas de segundo acumuladas
-dec_inf       dw 0
+prioridad_sup db 5       ; 5 = 50% superior / 50% inferior
+ranura        db 0       ; ranura del scheduler: 0 a 9, lo hago para recorrer un vector en 10 posiciones
 
-ms_sup        db 0    ; Contadores internos de milisegundos
+contador_sup  dw 0
+contador_inf  dw 0
+
+ms_sup        db 0
 ms_inf        db 0
-ms_serial     dw 0    ; Contador para disparar la tarea del puerto serie
+ms_serial     dw 0
 
 mensaje_excepcion db 'EXCEPCION DEL PROCESADOR', 0
+msg_sup           db 'MITAD SUPERIOR: ', 0
+msg_inf           db 'MITAD INFERIOR: ', 0
+msg_prio          db 'F2 / F3 - PRIORIDAD: ', 0
+msg_f10           db 'F10 LIMPIA Y HLT', 0
 
-; Cadenas de texto para la pantalla
-msg_sup       db 'MITAD SUPERIOR: ', 0
-msg_inf       db 'MITAD INFERIOR: ', 0
-msg_prio      db 'F2 / F3 - PRIORIDAD: ', 0
-msg_f10       db 'F10 LIMPIA Y HLT', 0
+;***********************************
+;       TSS
+;***********************************
+; TSS de la tarea inicial
+tssInicial resb 68h
 
-;*****************************
-;            TSS
-;*****************************
-; Agregamos 5 Task State Segments (TSS) de 32 bits (104 bytes cada una)
+; TSS de la tarea scheduler llamada por IRQ0
+tssScheduler dd 0
+        dd fin + 0x100
+        dw dataSel0
+        dw 0
+        dd 0        ; esp1
+        dd 0        ; ss1
+        dd 0        ; esp2
+        dd 0        ; ss2
+        dd 0        ; cr3
+        dd irq0Scheduler ; eip
+        dd 202h     ; eflags
+        dd 0        ; eax
+        dd 0        ; ecx
+        dd 0        ; edx
+        dd 0        ; ebx
+        dd fin + 0x100 ; esp
+        dd 0        ; ebp
+        dd 0        ; esi
+        dd 0        ; edi
+        dw videoSel0 ; es
+        dw 0
+        dw codeSel0 ; cs
+        dw 0
+        dw dataSel0 ; ss
+        dw 0
+        dw dataSel0 ; ds
+        dw 0
+        dd 0        ; fs
+        dd 0        ; gs
+        dd 0
+        dd 0
 
-tssInicial resb 104
+; TSS de la tarea de mitad superior
+tssSup dd 0
+        dd fin + 0x200
+        dw dataSel0
+        dw 0
+        dd 0        ; esp1
+        dd 0        ; ss1
+        dd 0        ; esp2
+        dd 0        ; ss2
+        dd 0        ; cr3
+        dd tareaSuperior ; eip
+        dd 202h     ; eflags
+        dd 0        ; eax
+        dd 0        ; ecx
+        dd 0        ; edx
+        dd 0        ; ebx
+        dd fin + 0x200 ; esp
+        dd 0        ; ebp
+        dd 0        ; esi
+        dd 0        ; edi
+        dw videoSel0 ; es
+        dw 0
+        dw codeSel0 ; cs
+        dw 0
+        dw dataSel0 ; ss
+        dw 0
+        dw dataSel0 ; ds
+        dw 0
+        dd 0        ; fs
+        dd 0        ; gs
+        dd 0
+        dd 0
 
-tssScheduler:
-  dd 0
-  dd pila_scheduler + 0FFh ; ESP0
-  dw dataSel0, 0           ; SS0
-  dd 0                     ; ESP1
-  dw 0, 0                  ; SS1
-  dd 0                     ; ESP2
-  dw 0, 0                  ; SS2
-  dd 0                     ; CR3
-  dd irq0Scheduler         ; EIP
-  dd 202h                  ; EFLAGS (IF=1)
-  dd 0, 0, 0, 0            ; EAX, ECX, EDX, EBX
-  dd pila_scheduler + 0FFh ; ESP
-  dd 0, 0, 0               ; EBP, ESI, EDI
-  dw videoSel0, 0          ; ES
-  dw codeSel0, 0           ; CS
-  dw dataSel0, 0           ; SS
-  dw dataSel0, 0           ; DS
-  dw dataSel0, 0           ; FS
-  dw dataSel0, 0           ; GS
-  dw 0, 0                  ; LDT
-  dw 0, 104                ; I/O map base deshabilitado para no generar GPF
+; TSS de la tarea de mitad inferior
+tssInf dd 0
+        dd fin + 0x300
+        dw dataSel0
+        dw 0
+        dd 0        ; esp1
+        dd 0        ; ss1
+        dd 0        ; esp2
+        dd 0        ; ss2
+        dd 0        ; cr3
+        dd tareaInferior ; eip
+        dd 202h     ; eflags
+        dd 0        ; eax
+        dd 0        ; ecx
+        dd 0        ; edx
+        dd 0        ; ebx
+        dd fin + 0x300 ; esp
+        dd 0        ; ebp
+        dd 0        ; esi
+        dd 0        ; edi
+        dw videoSel0 ; es
+        dw 0
+        dw codeSel0 ; cs
+        dw 0
+        dw dataSel0 ; ss
+        dw 0
+        dw dataSel0 ; ds
+        dw 0
+        dd 0        ; fs
+        dd 0        ; gs
+        dd 0
+        dd 0
 
-tssTareaSup:
-  dd 0, pila_sup + 0FFh
-  dw dataSel0, 0
-  dd 0, 0, 0, 0, 0
-  dd tareaSuperior
-  dd 202h
-  dd 0, 0, 0, 0
-  dd pila_sup + 0FFh
-  dd 0, 0, 0
-  dw videoSel0, 0, codeSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0
-  dw 0, 0, 0, 104
+; TSS de la tarea de puerto serie
+tssSerial dd 0
+        dd fin + 0x400
+        dw dataSel0
+        dw 0
+        dd 0        ; esp1
+        dd 0        ; ss1
+        dd 0        ; esp2
+        dd 0        ; ss2
+        dd 0        ; cr3
+        dd tareaSerial ; eip
+        dd 202h     ; eflags
+        dd 0        ; eax
+        dd 0        ; ecx
+        dd 0        ; edx
+        dd 0        ; ebx
+        dd fin + 0x400 ; esp
+        dd 0        ; ebp
+        dd 0        ; esi
+        dd 0        ; edi
+        dw videoSel0 ; es
+        dw 0
+        dw codeSel0 ; cs
+        dw 0
+        dw dataSel0 ; ss
+        dw 0
+        dw dataSel0 ; ds
+        dw 0
+        dd 0        ; fs
+        dd 0        ; gs
+        dd 0
+        dd 0
 
-tssTareaInf:
-  dd 0, pila_inf + 0FFh
-  dw dataSel0, 0
-  dd 0, 0, 0, 0, 0
-  dd tareaInferior
-  dd 202h
-  dd 0, 0, 0, 0
-  dd pila_inf + 0FFh
-  dd 0, 0, 0
-  dw videoSel0, 0, codeSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0
-  dw 0, 0, 0, 104
-
-tssSerial:
-  dd 0, pila_serial + 0FFh
-  dw dataSel0, 0
-  dd 0, 0, 0, 0, 0
-  dd tareaSerial
-  dd 202h
-  dd 0, 0, 0, 0
-  dd pila_serial + 0FFh
-  dd 0, 0, 0
-  dw videoSel0, 0, codeSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0, dataSel0, 0
-  dw 0, 0, 0, 104
-
-;*****************************
-;            GDT
-;*****************************
+;***********************************
+;       GDT
+;***********************************
 gdt:
   ; Descriptor nulo
   resb 8
 
-; Descriptor de datos, base 0, limite 64 KB, nivel 0
+; Descriptor de datos (Offset 0, size 64k, nivel 0)
 dataSel0 equ $-gdt
   dw 0xffff
   dw 0x0000
@@ -117,7 +191,7 @@ dataSel0 equ $-gdt
   db 0x00
   db 0x00
 
-; Descriptor de video, base 0xB8000, limite 4 KB, nivel 0
+; Descriptor de video (Offset 0xb8000, size 4k, nivel 0)
 videoSel0 equ $-gdt
   dw 0x1000
   dw 0x8000
@@ -126,7 +200,7 @@ videoSel0 equ $-gdt
   db 0x00
   db 0x00
 
-; Descriptor de codigo, base 0, limite 64 KB, nivel 0
+; Descriptor de codigo (Offset 0, size 64k, nivel 0)
 codeSel0 equ $-gdt
   dw 0xffff
   dw 0x0000
@@ -135,56 +209,59 @@ codeSel0 equ $-gdt
   db 0x00
   db 0x00
 
-; --- NUEVO: Descriptores de las TSS ---
-; Limite: 103 (0x67) bytes. Atributo: 89h (Available 32-bit TSS)
+; Descriptor de TSS inicial
 tssInicialSel equ $-gdt
-  dw 103
+  dw 67h
   dw tssInicial
   db 0
-  db 89h
+  db 10001001b
   db 0
   db 0
 
+; Descriptor de TSS scheduler
 tssSchedulerSel equ $-gdt
-  dw 103
+  dw 67h
   dw tssScheduler
   db 0
-  db 89h
+  db 10001001b
   db 0
   db 0
 
-tssTareaSupSel equ $-gdt
-  dw 103
-  dw tssTareaSup
+; Descriptor de TSS superior
+tssSupSel equ $-gdt
+  dw 67h
+  dw tssSup
   db 0
-  db 89h
-  db 0
-  db 0
-
-tssTareaInfSel equ $-gdt
-  dw 103
-  dw tssTareaInf
-  db 0
-  db 89h
+  db 10001001b
   db 0
   db 0
 
+; Descriptor de TSS inferior
+tssInfSel equ $-gdt
+  dw 67h
+  dw tssInf
+  db 0
+  db 10001001b
+  db 0
+  db 0
+
+; Descriptor de TSS puerto serie
 tssSerialSel equ $-gdt
-  dw 103
+  dw 67h
   dw tssSerial
   db 0
-  db 89h
+  db 10001001b
   db 0
   db 0
 
+; Tamano de la gdt
 gdtSize equ $-gdt
 
-;*****************************
-;            IDT
-;*****************************
+;***********************************
+;       IDT
+;***********************************
 idt:
-; Mantuve tu IDT manual exacta para no romper las alineaciones de NASM.
-
+; Excepciones del procesador, INT 00h a INT 1Fh
 ; INT 00h - Division por cero
   dw exc0
   dw codeSel0
@@ -409,15 +486,14 @@ idt:
   db 10000110b
   dw 0
 
-; --- NUEVO: INT 20h - IRQ0 timer - USADO COMO TASK GATE ---
-; El atributo 85h (10000101b) define que esto es una Puerta de Tarea.
+; INT 20h - IRQ0 Timer tick - Task gate
   dw 0
   dw tssSchedulerSel
   db 0
-  db 85h
+  db 10000101b
   dw 0
 
-; INT 21h - IRQ1 teclado
+; INT 21h - IRQ1 Teclado
   dw irq1Handler
   dw codeSel0
   db 0
@@ -426,327 +502,303 @@ idt:
 
 idtSize equ $-idt
 
-;*****************************
-;          Codigo
-;*****************************
+;***********************************
+;       Codigo
+;***********************************
 inicio:
+; Deshabilito interrupciones
   cli
 
-; ======= REPROGRAMACION PIC MASTER Y SLAVE ==============
-; --------- PIC Master ---------
+;***********************************
+; Reprogramo PIC
+;***********************************
+; Master
   mov al, 11h
   out 20h, al
-  mov al, 20h ;vector base
+  mov al, 20h
   out 21h, al
   mov al, 04h
   out 21h, al
   mov al, 01h
   out 21h, al
-  mov al, 0FFh
-  out 21h, al
 
-; ---------  PIC Slave --------- 
+; Slave
   mov al, 11h
-  out 0A0h, al
-  mov al, 28h  ;vector base
-  out 0A1h, al
+  out 0a0h, al
+  mov al, 28h
+  out 0a1h, al
   mov al, 02h
-  out 0A1h, al
+  out 0a1h, al
   mov al, 01h
-  out 0A1h, al
-; =======================================================
+  out 0a1h, al
 
-; --- NUEVO: Inicializar Puerto Serie COM1 a 9600 baud ---
-  mov dx, 3fbh    
-  mov al, 80h     
+; Enmascaro todo
+  mov al, 0ffh
+  out 21h, al
+  mov al, 0ffh
+  out 0a1h, al
+
+;***********************************
+; Inicializo COM1
+;***********************************
+  mov dx, 3fbh
+  mov al, 80h
   out dx, al
-  mov dx, 3f8h    
-  mov al, 0ch     ; Divisor para 9600
+
+  mov dx, 3f8h
+  mov al, 0ch
   out dx, al
-  mov dx, 3f9h    
+
+  mov dx, 3f9h
   mov al, 00h
   out dx, al
-  mov dx, 3fbh    
-  mov al, 03h     ; 8N1
-  out dx, al
-; =======================================================
 
-; ====================== GDTR ===========================
+  mov dx, 3fbh
+  mov al, 03h
+  out dx, al
+
+;***********************************
+; Cargo GDTR
+;***********************************
   mov ax, gdtSize - 1
   mov [gdtr + 0], ax
+
   xor eax, eax
   mov ax, gdt
   mov [gdtr + 2], eax
-  lgdt [gdtr]
 
-; ====================== IDTR ===========================
+;***********************************
+; Cargo IDTR
+;***********************************
   mov ax, idtSize - 1
   mov [idtr + 0], ax
+
   xor eax, eax
   mov eax, idt
   mov [idtr + 2], eax
+
+; Cargo gdtr e idtr
+  lgdt [gdtr]
   lidt [idtr]
 
-; =============== Activo MODO PROTEGIDO  ================
+; Paso a modo protegido
   mov eax, cr0
   or al, 1
   mov cr0, eax
   jmp short $+2
+
+; Cargo cs con el selector de codigo
   jmp codeSel0:modo_protegido
 
 modo_protegido:
-; --- DS para datos --- 
+; Cargo ds, es y ss
   mov ax, dataSel0
   mov ds, ax
+  mov ss, ax
 
-; ---  ES para video --- 
   mov ax, videoSel0
   mov es, ax
 
-; ---  SS para pila --- 
-  mov ax, dataSel0
-  mov ss, ax
-
-; ---  inicializo pila --- 
-  mov eax, fin + 100h
+; Inicializo pila
+  mov eax, fin + 0x500
   mov esp, eax
 
-; --- NUEVO: Cargar la TSS inicial del procesador ---
+; Cargo TSS inicial
   mov ax, tssInicialSel
   ltr ax
 
-; --- NUEVO: Reprogramar el Timer a 1 mseg exacto ---
+; Programo timer cada 1 ms
   mov al, 36h
   out 43h, al
-  mov ax, 04A9h  ; 1193 en Hexadecimal
+  mov ax, 04a9h
   out 40h, al
   mov al, ah
   out 40h, al
 
-; --- Cambio de color de pantalla --- 
-  call pintar_video_inverso
-  call imprimir_titulos_25
+; Inicializo pantalla
+  call limpiar_pantalla
+  call imprimir_titulos
   call mostrar_prioridades
 
-; === PIC MASTER: habilito IRQ0 (Timer) e IRQ1 (Teclado) [1111 1100 b] ===
-  mov al, 0FCh 
+; Habilito IRQ0 e IRQ1
+  mov al, 0fch ; 1111 1100
   out 21h, al
+  mov al, 0ffh
+  out 0a1h, al
 
-; === PIC SLAVE: enmascaro todo el PIC Slave ===
-  mov al, 0FFh
-  out 0A1h, al
-
-; --- habilito interrupciones ---
+; Habilito interrupciones
   sti
 
-; --- espero interrupciones ---
-esperar:
-  jmp esperar
+jmp $
 
-
-;*********************************************************
-;        TAREA Scheduler llamada por IRQ0
-;*********************************************************
+;-------------------------------------------------------------
+; Tarea asociada a la IRQ0
+;-------------------------------------------------------------
 irq0Scheduler:
   cli
+
   mov ax, dataSel0
   mov ds, ax
   mov ax, videoSel0
   mov es, ax
 
-; EOI al PIC Master
+; Bajo flag de interrupcion
   mov al, 20h
   out 20h, al
 
-; Chequeo de tiempo para el puerto serie (1000 ticks = 1 seg)
+; Cada 1000 ticks llamo a la tarea serie
   inc word [ms_serial]
   cmp word [ms_serial], 1000
   jb scheduler_pantalla
-  
-  mov word [ms_serial], 0     
-  mov al, 89h  ; Limpia flag de "ocupado" del TSS
-  mov [gdt + tssSerialSel + 5], al 
-  jmp tssSerialSel:0             
-  jmp irq0Scheduler              
+
+  mov word [ms_serial], 0
+  mov al, 89h
+  mov [gdt + tssSerialSel + 5], al
+  sti
+  jmp tssSerialSel:0
+  jmp irq0Scheduler
 
 scheduler_pantalla:
-  mov al, [ranura]
+  mov al, [ranura]        ; 
   cmp al, [prioridad_sup]
   jb ejecutar_sup
 
+;-------------------------------------------------------------
+; Ejecuto mitad inferior
+;-------------------------------------------------------------
 ejecutar_inf:
   call avanzar_ranura
+
   inc byte [ms_inf]
   cmp byte [ms_inf], 100
-  jb .fin_inf
+  jb fin_inf
   mov byte [ms_inf], 0
-  inc word [dec_inf]
-.fin_inf:
-  mov al, 89h
-  mov [gdt + tssTareaInfSel + 5], al
-  jmp tssTareaInfSel:0
-  jmp irq0Scheduler              
+  inc word [contador_inf]
 
+fin_inf:
+  mov al, 89h
+  mov [gdt + tssInfSel + 5], al
+  sti
+  jmp tssInfSel:0
+  jmp irq0Scheduler
+
+;-------------------------------------------------------------
+; Ejecuto mitad superior
+;-------------------------------------------------------------
 ejecutar_sup:
   call avanzar_ranura
+
   inc byte [ms_sup]
   cmp byte [ms_sup], 100
-  jb .fin_sup
+  jb fin_sup
   mov byte [ms_sup], 0
-  inc word [dec_sup]
-.fin_sup:
-  mov al, 89h
-  mov [gdt + tssTareaSupSel + 5], al
-  jmp tssTareaSupSel:0
-  jmp irq0Scheduler              
+  inc word [contador_sup]
 
+fin_sup:
+  mov al, 89h
+  mov [gdt + tssSupSel + 5], al
+  sti
+  jmp tssSupSel:0
+  jmp irq0Scheduler
+
+;-------------------------------------------------------------
 avanzar_ranura:
   inc byte [ranura]
   cmp byte [ranura], 10
-  jb .fin
+  jb fin_ranura
   mov byte [ranura], 0
-.fin:
+fin_ranura:
   ret
 
-;*********************************************************
-;              TAREAS DE PANTALLA Y SERIE
-;*********************************************************
+;-------------------------------------------------------------
+; Tarea mitad superior
+;-------------------------------------------------------------
 tareaSuperior:
   mov ax, dataSel0
   mov ds, ax
   mov ax, videoSel0
   mov es, ax
-.bucle:
-  mov ax, [dec_sup]
+
+bucle_sup:
+  mov ax, [contador_sup]
   mov edi, ((5*80)+35)*2
   call imprimir_numero_5
-  jmp .bucle
+  jmp bucle_sup
 
+;-------------------------------------------------------------
+; Tarea mitad inferior
+;-------------------------------------------------------------
 tareaInferior:
   mov ax, dataSel0
   mov ds, ax
   mov ax, videoSel0
   mov es, ax
-.bucle:
-  mov ax, [dec_inf]
+
+bucle_inf:
+  mov ax, [contador_inf]
   mov edi, ((15*80)+35)*2
   call imprimir_numero_5
-  jmp .bucle
+  jmp bucle_inf
 
+;-------------------------------------------------------------
+; Tarea puerto serie
+;-------------------------------------------------------------
 tareaSerial:
   mov ax, dataSel0
   mov ds, ax
-.bucle:
+
+bucle_serial:
   cli
-  mov ax, [dec_sup]
+
+  mov ax, [contador_sup]
   call enviar_numero_serie
+
   mov al, ' '
-  call enviar_char_serie
+  call enviar_caracter_serie
 
-  mov ax, [dec_inf]
+  mov ax, [contador_inf]
   call enviar_numero_serie
+
   mov al, 13
-  call enviar_char_serie
+  call enviar_caracter_serie
   mov al, 10
-  call enviar_char_serie
+  call enviar_caracter_serie
+
   sti
-  jmp .bucle 
+  jmp bucle_serial
 
-enviar_numero_serie:
-  push ax
-  push bx
-  push cx
-  push dx
-  mov bx, 10
-  mov cx, 0
-.div_loop:
-  xor dx, dx
-  div bx
-  push dx
-  inc cx
-  cmp ax, 0
-  jne .div_loop
-.print_loop:
-  pop dx
-  add dl, '0'
-  mov al, dl
-  call enviar_char_serie
-  loop .print_loop
-  pop dx
-  pop cx
-  pop bx
-  pop ax
-  ret
-
-enviar_char_serie:
-  push dx
-  push ax
-.wait_tx:
-  mov dx, 3fdh       
-  in al, dx
-  test al, 20h       
-  jz .wait_tx
-  pop ax
-  mov dx, 3f8h       
-  out dx, al
-  pop dx
-  ret
-
-;*********************************************************
-;                       FUNCIONES
-;*********************************************************
-
-; --------------------------------------
-;|   Pintar pantalla en video inverso   |
-; --------------------------------------
-pintar_video_inverso:
-  push ax
-  push cx
-  push edi
-
-  mov cx, 80*25
-  xor edi, edi      ; Empezar desde el offset 0 de la memoria de video
-  mov ax, 7020h     ; AH = 70h (Atributo inverso), AL = 20h (Carácter de espacio ' ')
-
-bucle_pantalla:
-  mov [es:edi], ax  ; Escribo el espacio y el color al mismo tiempo (2 bytes)
-  add edi, 2        ; Avanzo a la siguiente celda de la pantalla
-  loop bucle_pantalla
-
-  pop edi
-  pop cx
-  pop ax
-
-  ret
-
-; -----------------------------------------
-;|   Handler de teclado - INT 21h - IRQ1   |
-; -----------------------------------------
+;-------------------------------------------------------------
+; Handler de teclado - IRQ1
+;-------------------------------------------------------------
 irq1Handler:
   cli
 
-; leo scan code
+; Leo scancode
   in al, 60h
 
-; si es break code, no cuento
+; Si es break code, no hago nada
   test al, 80h
   jnz fin_irq1
 
-; --- MANTENIDO DE TU 2.4: tecla J dispara excepcion ---
+; Tecla J - genero excepcion
   cmp al, 24h
   je generar_excepcion
 
-; --- NUEVO 2.5: Teclas F2, F3, F10 ---
-  cmp al, 3ch ; F2
+; F2 - aumenta prioridad superior
+  cmp al, 3ch
   je tecla_f2
-  cmp al, 3dh ; F3
+
+; F3 - disminuye prioridad superior
+  cmp al, 3dh
   je tecla_f3
-  cmp al, 44h ; F10
+
+; F10 - limpia pantalla y detiene CPU
+  cmp al, 44h
   je tecla_f10
 
-; cualquier otra tecla incrementa contador (Original 2.4)
-  inc byte [contador]
-  call mostrar_contador
+; Cualquier otra tecla incrementa contador
+  inc byte [tecla]
+  call mostrar_teclas
   jmp fin_irq1
 
 tecla_f2:
@@ -764,98 +816,81 @@ tecla_f3:
   jmp fin_irq1
 
 tecla_f10:
-  call limpiar_pantalla_total
+  call limpiar_pantalla
   mov al, 20h
   out 20h, al
   cli
   hlt
   jmp $
 
-; -----------------------------------------
-;|               EXCEPCION                 | -> Mantenido del 2.4
-; -----------------------------------------
 generar_excepcion:
-; Genero una excepcion de operacion invalida.
-  db 0Fh, 0Bh       ; UD2
+; Genero una excepcion de operacion invalida
+  db 0fh, 0bh
 
-; -----------------------------------------
-;|         FIN DE INTERRUPCION             | -> Mantenido del 2.4
-; -----------------------------------------
 fin_irq1:
-; EOI al PIC Master
   mov al, 20h
   out 20h, al
   sti
   iret
 
-; -----------------------------------------
-;|           Mostrar contador              | -> Mantenido exacto del 2.4
-; -----------------------------------------
-mostrar_contador:
+;-------------------------------------------------------------
+; Funciones de pantalla
+;-------------------------------------------------------------
+limpiar_pantalla:
   push ax
-  push bx
+  push cx
   push edi
-  mov al, [contador]
-  xor ah, ah
-  mov bl, 10
-  div bl
-  add al, '0'
-  add ah, '0'
-  mov bl, al
-  mov bh, ah
-  mov edi, 0
-; decenas
-  mov al, bl
-  mov [es:edi], al
-  inc edi
-  mov al, 70h
-  mov [es:edi], al
-  inc edi
-; unidades
-  mov al, bh
-  mov [es:edi], al
-  inc edi
-  mov al, 70h
-  mov [es:edi], al
+
+  mov ax, 7020h
+  mov cx, 80*25
+  xor edi, edi
+
+bucle_limpiar:
+  mov [es:edi], ax
+  add edi, 2
+  loop bucle_limpiar
+
   pop edi
-  pop bx
+  pop cx
   pop ax
   ret
 
-; -----------------------------------------
-;| Rutinas auxiliares para el Ejercicio 2.5|
-; -----------------------------------------
-imprimir_titulos_25:
+imprimir_titulos:
   push ax
   push bx
   push cx
   push esi
   push edi
+
   mov bl, 70h
+
   mov esi, msg_sup
   mov edi, ((5*80)+10)*2
   call imprimir_cadena
+
   mov esi, msg_inf
   mov edi, ((15*80)+10)*2
   call imprimir_cadena
+
   mov esi, msg_prio
   mov edi, ((22*80)+10)*2
   call imprimir_cadena
+
   mov esi, msg_f10
   mov edi, ((24*80)+60)*2
   call imprimir_cadena
-  
-  ; Línea divisoria al medio
+
   mov cx, 80
   mov edi, (10*80)*2
-.linea:
+linea:
   mov al, '-'
   mov [es:edi], al
   inc edi
   mov al, 70h
   mov [es:edi], al
   inc edi
-  loop .linea
+  loop linea
+
   pop edi
   pop esi
   pop cx
@@ -863,10 +898,34 @@ imprimir_titulos_25:
   pop ax
   ret
 
+imprimir_cadena:
+  push ax
+  push esi
+  push edi
+
+bucle_cadena:
+  mov al, [esi]
+  cmp al, 0
+  je fin_cadena
+  mov [es:edi], al
+  inc edi
+  mov al, bl
+  mov [es:edi], al
+  inc edi
+  inc esi
+  jmp bucle_cadena
+
+fin_cadena:
+  pop edi
+  pop esi
+  pop ax
+  ret
+
 mostrar_prioridades:
   push ax
   push bx
   push edi
+
   mov al, [prioridad_sup]
   mov bl, 10
   mul bl
@@ -885,35 +944,51 @@ mostrar_prioridades:
   mov bl, 10
   mul bl
   call imprimir_numero_3
+
   pop edi
   pop bx
   pop ax
   ret
 
-imprimir_cadena:
+mostrar_teclas:
   push ax
-  push esi
+  push bx
   push edi
-.loop:
-  mov al, [esi]
-  cmp al, 0
-  je .fin
-  mov [es:edi], al
-  inc edi
+
+  mov al, [tecla]
+  xor ah, ah
+  mov bl, 10
+  div bl
+
+  add al, '0'
+  add ah, '0'
+  mov bl, al
+  mov bh, ah
+
+  mov edi, 0
+
   mov al, bl
   mov [es:edi], al
   inc edi
-  inc esi
-  jmp .loop
-.fin:
+  mov al, 70h
+  mov [es:edi], al
+  inc edi
+
+  mov al, bh
+  mov [es:edi], al
+  inc edi
+  mov al, 70h
+  mov [es:edi], al
+
   pop edi
-  pop esi
+  pop bx
   pop ax
   ret
 
 imprimir_numero_5:
   push ax
   push bx
+
   mov bx, 10000
   call imprimir_digito
   mov bx, 1000
@@ -924,6 +999,7 @@ imprimir_numero_5:
   call imprimir_digito
   mov bx, 1
   call imprimir_digito
+
   pop bx
   pop ax
   ret
@@ -931,18 +1007,21 @@ imprimir_numero_5:
 imprimir_numero_3:
   push ax
   push bx
+
   mov bx, 100
   call imprimir_digito
   mov bx, 10
   call imprimir_digito
   mov bx, 1
   call imprimir_digito
+
   mov al, '%'
   mov [es:edi], al
   inc edi
   mov al, 70h
   mov [es:edi], al
   inc edi
+
   pop bx
   pop ax
   ret
@@ -950,6 +1029,7 @@ imprimir_numero_3:
 imprimir_digito:
   push cx
   push dx
+
   xor dx, dx
   div bx
   mov cx, dx
@@ -962,30 +1042,64 @@ imprimir_digito:
   inc edi
 
   mov ax, cx
+
   pop dx
   pop cx
   ret
 
-limpiar_pantalla_total:
+;-------------------------------------------------------------
+; Funciones puerto serie
+;-------------------------------------------------------------
+enviar_numero_serie:
   push ax
+  push bx
   push cx
-  push edi
-  mov ax, 0720h
-  mov cx, 80*25
-  xor edi, edi
-.loop:
-  mov [es:edi], ax
-  add edi, 2
-  loop .loop
-  pop edi
+  push dx
+
+  mov bx, 10
+  mov cx, 0
+
+serie_dividir:
+  xor dx, dx
+  div bx
+  push dx
+  inc cx
+  cmp ax, 0
+  jne serie_dividir
+
+serie_imprimir:
+  pop dx
+  add dl, '0'
+  mov al, dl
+  call enviar_caracter_serie
+  loop serie_imprimir
+
+  pop dx
   pop cx
+  pop bx
   pop ax
   ret
 
+enviar_caracter_serie:
+  push dx
+  push ax
 
-; -----------------------------------------
-;|        Handlers de excepciones          | -> Mantenido exacto del 2.4
-; -----------------------------------------
+serie_esperar:
+  mov dx, 3fdh
+  in al, dx
+  test al, 20h
+  jz serie_esperar
+
+  pop ax
+  mov dx, 3f8h
+  out dx, al
+
+  pop dx
+  ret
+
+;-------------------------------------------------------------
+; Excepciones
+;-------------------------------------------------------------
 exc0: call imprimir_excepcion
   jmp $
 exc1: call imprimir_excepcion
@@ -1051,41 +1165,27 @@ exc30: call imprimir_excepcion
 exc31: call imprimir_excepcion
   jmp $
 
-
-; -----------------------------------------
-;|    Imprimir mensaje de excepcion        | -> Mantenido exacto del 2.4
-; -----------------------------------------
 imprimir_excepcion:
   push ax
   push bx
   push esi
   push edi
+
+  mov bl, 4fh
   mov edi, ((10*80)+20)*2
   mov esi, mensaje_excepcion
-imprimir_loop:
-  mov al, [esi]
-  cmp al, 0
-  je fin_imprimir
-  mov [es:edi], al
-  inc edi
-  mov al, 4Fh
-  mov [es:edi], al
-  inc edi
-  inc esi
-  jmp imprimir_loop
-fin_imprimir:
+  call imprimir_cadena
+
   pop edi
   pop esi
   pop bx
   pop ax
   ret
 
-;*****************************
-;         Pilas (NUEVAS)
-;*****************************
-pila_scheduler: resb 256
-pila_sup:       resb 256
-pila_inf:       resb 256
-pila_serial:    resb 256
-
 fin:
+
+; scheduler -> fin + 0x100
+; superior  -> fin + 0x200
+; inferior  -> fin + 0x300
+; serie     -> fin + 0x400
+; inicial   -> fin + 0x500
