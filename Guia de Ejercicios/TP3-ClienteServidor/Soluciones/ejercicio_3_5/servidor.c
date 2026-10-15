@@ -1,18 +1,18 @@
-/* Ejercicio 3.5: servidor concurrente de logs remotos. */
+/* Ejercicio 3.5: servidor */
+/* Lucas Gallero - 25632 - TD3 */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
 #include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <sys/select.h>
 #include <sys/wait.h>
+#include <netinet/in.h>
 
-#define MYPORT 5024
-#define BACKLOG 10
+#define TCP_PORT 5024
 #define MAX_HIJOS 10
 #define PUERTO_INICIAL 10000
 #define BLOQUE 50
@@ -20,247 +20,183 @@
 #define LIMITE_HIJO 120
 #define LIMITE_PADRE 60
 
-int atender_cliente(int new_fd)
+
+int buscar_puerto_udp(int udp_sock)
 {
-    int udpfd, puerto, resultado, numbytes, segundos_sin_datos;
-    unsigned short puerto_red;
-    struct sockaddr_in udp_addr;
+    struct sockaddr_in direccion;
+    int puerto;
+
+    memset(&direccion, 0, sizeof(direccion));
+    direccion.sin_family = AF_INET;
+    direccion.sin_addr.s_addr = INADDR_ANY;
+
+    for (puerto = PUERTO_INICIAL; puerto <= 65535; puerto++) {
+        direccion.sin_port = htons(puerto);
+        if (bind(udp_sock, (struct sockaddr *)&direccion, sizeof(direccion)) == 0)
+            return puerto;
+        if (errno != EADDRINUSE)
+            break;
+    }
+    return -1;
+}
+
+
+void atender_hijo(int tcp_sock)
+{
+    int udp_sock, puerto, resultado, cantidad, segundos_sin_datos = 0;
+    char mensaje_puerto[16], buffer[BLOQUE + 1];
     fd_set lectura;
     struct timeval tiempo;
-    char buf[BLOQUE];
 
-    /* Buscamos un puerto UDP libre: 10000, 10001, 10002, ... */
-    udpfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udpfd == -1)
-    {
+    udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_sock == -1) {
         perror("socket UDP");
-        close(new_fd);
-        return 1;
+        exit(1);
+    }
+    puerto = buscar_puerto_udp(udp_sock);
+    if (puerto == -1) {
+        fprintf(stderr, "No se pudo reservar un puerto UDP.\n");
+        exit(1);
     }
 
-    memset(&udp_addr, 0, sizeof(udp_addr));
-    udp_addr.sin_family = AF_INET;
-    udp_addr.sin_addr.s_addr = INADDR_ANY;
-
-    for (puerto = PUERTO_INICIAL; puerto <= 65535; puerto++)
-    {
-        udp_addr.sin_port = htons(puerto);
-        if (bind(udpfd, (struct sockaddr *)&udp_addr, sizeof(udp_addr)) == 0)
-            break;
-        if (errno != EADDRINUSE)
-        {
-            perror("bind UDP");
-            close(udpfd);
-            close(new_fd);
-            return 1;
-        }
+    snprintf(mensaje_puerto, sizeof(mensaje_puerto), "%d\n", puerto);
+    if (send(tcp_sock, mensaje_puerto, strlen(mensaje_puerto), 0)
+        != (ssize_t)strlen(mensaje_puerto)) {
+        perror("send puerto");
+        exit(1);
     }
-    if (puerto > 65535)
-    {
-        fprintf(stderr, "No hay un puerto UDP libre.\n");
-        close(udpfd);
-        close(new_fd);
-        return 1;
-    }
-
-    /* Avisamos el puerto por TCP: 2 bytes, en orden de red. */
-    puerto_red = htons(puerto);
-    if (send(new_fd, &puerto_red, sizeof(puerto_red), MSG_NOSIGNAL)
-        != sizeof(puerto_red))
-    {
-        perror("send puerto UDP");
-        close(udpfd);
-        close(new_fd);
-        return 1;
-    }
+    close(tcp_sock);
     printf("Hijo %ld: puerto UDP %d.\n", (long)getpid(), puerto);
 
-    /* En este ejercicio TCP solo se usa para informar el puerto UDP. */
-    close(new_fd);
-    segundos_sin_datos = 0;
+    while (segundos_sin_datos < LIMITE_HIJO) {
 
-    while (segundos_sin_datos < LIMITE_HIJO)
-    {
-        /* select modifica estos valores: hay que cargarlos en cada vuelta. */
         FD_ZERO(&lectura);
-        FD_SET(udpfd, &lectura);
+        FD_SET(udp_sock, &lectura);
+
         tiempo.tv_sec = INTERVALO;
         tiempo.tv_usec = 0;
+        resultado = select(udp_sock + 1, &lectura, NULL, NULL, &tiempo);
 
-        resultado = select(udpfd + 1, &lectura, NULL, NULL, &tiempo);
-        if (resultado == -1)
-        {
+        if (resultado == -1) {
             if (errno == EINTR)
                 continue;
             perror("select hijo");
-            close(udpfd);
-            return 1;
+            exit(1);
         }
-        if (resultado == 0)
-        {
-            segundos_sin_datos = segundos_sin_datos + INTERVALO;
-            printf("Hijo %ld: %d segundos sin datos.\n",
-                   (long)getpid(), segundos_sin_datos);
-        }
-        else
-        {
-            numbytes = recvfrom(udpfd, buf, sizeof(buf), 0, NULL, NULL);
-            if (numbytes == -1)
-            {
+        if (resultado == 0) {
+            segundos_sin_datos += INTERVALO;
+            printf("Hijo UDP %d: %d segundos sin datos.\n", puerto, segundos_sin_datos);
+        } else {
+            cantidad = recvfrom(udp_sock, buffer, BLOQUE, 0, NULL, NULL);
+            if (cantidad == -1) {
                 perror("recvfrom");
                 continue;
             }
-            /* Cada datagrama reinicia los dos minutos de inactividad. */
+            buffer[cantidad] = '\0';
+            printf("Hijo UDP %d: %s\n", puerto, buffer);
             segundos_sin_datos = 0;
-            printf("Hijo %ld, UDP %d, %d bytes: ",
-                   (long)getpid(), puerto, numbytes);
-            fwrite(buf, 1, numbytes, stdout);
-            printf("\n");
         }
     }
-
-    printf("Hijo %ld: termina por inactividad.\n", (long)getpid());
-    close(udpfd);
-    return 0;
+    printf("Hijo UDP %d: finaliza por inactividad.\n", puerto);
+    close(udp_sock);
+    exit(0);
 }
 
 int main(void)
 {
-    int sockfd, new_fd, opcion, resultado, hijos, segundos_sin_hijos;
-    unsigned short puerto_red;
-    socklen_t sin_size;
-    struct sockaddr_in my_addr, their_addr;
+    int tcp_sock, nuevo_sock, resultado, opcion = 1;
+    int hijos = 0, segundos_sin_hijos = 0;
+    pid_t pid;
+    struct sockaddr_in direccion;
     fd_set lectura;
     struct timeval tiempo;
-    pid_t pid;
 
     setbuf(stdout, NULL);
-    hijos = 0;
-    segundos_sin_hijos = 0;
+    signal(SIGPIPE, SIG_IGN); 
 
-    /* 1. Creamos el socket TCP del servidor. */
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1)
-    {
-        perror("socket");
+    tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (tcp_sock == -1) {
+        perror("socket TCP");
         return 1;
     }
-
-    /* Permite volver a ejecutar el servidor despues de cerrarlo. */
-    opcion = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
-                   &opcion, sizeof(opcion)) == -1)
-    {
+    if (setsockopt(tcp_sock, SOL_SOCKET, SO_REUSEADDR, &opcion, sizeof(opcion)) == -1) {
         perror("setsockopt");
-        close(sockfd);
         return 1;
     }
+    memset(&direccion, 0, sizeof(direccion));
+    direccion.sin_family = AF_INET;
+    direccion.sin_port = htons(TCP_PORT);
+    direccion.sin_addr.s_addr = INADDR_ANY;
 
-    /* 2. Preparamos la direccion local y el puerto TCP. */
-    memset(&my_addr, 0, sizeof(my_addr));
-    my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(MYPORT);
-    my_addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sockfd, (struct sockaddr *)&my_addr, sizeof(my_addr)) == -1)
-    {
-        perror("bind");
-        close(sockfd);
+    if (bind(tcp_sock, (struct sockaddr *)&direccion, sizeof(direccion)) == -1) {
+        perror("bind TCP");
         return 1;
     }
-
-    /* 3. Habilitamos la cola de conexiones pendientes. */
-    if (listen(sockfd, BACKLOG) == -1)
-    {
+    if (listen(tcp_sock, MAX_HIJOS) == -1) {
         perror("listen");
-        close(sockfd);
         return 1;
     }
+    printf("Servidor esperando conexiones en TCP %d.\n", TCP_PORT);
 
-    printf("Servidor esperando conexiones en TCP %d.\n", MYPORT);
-
-    while (1)
-    {
-        /* WNOHANG recoge los hijos terminados sin bloquear al padre. */
-        while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
-        {
+    while (1) {
+      
+        while (waitpid(-1, NULL, WNOHANG) > 0) {
             hijos--;
-            printf("Termino el hijo %ld. Hijos activos: %d.\n", (long)pid, hijos);
+            printf("Termino un hijo. Hijos activos: %d.\n", hijos);
         }
-
         if (hijos > 0)
             segundos_sin_hijos = 0;
 
-        /* Revisamos cada segundo si termino algun hijo. */
         FD_ZERO(&lectura);
-        FD_SET(sockfd, &lectura);
-        tiempo.tv_sec = 1;
+        FD_SET(tcp_sock, &lectura);
+
+        tiempo.tv_sec = 1; 
         tiempo.tv_usec = 0;
-        resultado = select(sockfd + 1, &lectura, NULL, NULL, &tiempo);
-        if (resultado == -1)
-        {
+        resultado = select(tcp_sock + 1, &lectura, NULL, NULL, &tiempo);
+
+        if (resultado == -1) {
             if (errno == EINTR)
                 continue;
             perror("select padre");
-            close(sockfd);
-            return 1;
+            break;
         }
-
-        if (resultado == 0)
-        {
+        if (resultado == 0) {
             if (hijos == 0)
                 segundos_sin_hijos++;
-            if (segundos_sin_hijos >= LIMITE_PADRE)
-            {
+            if (segundos_sin_hijos >= LIMITE_PADRE) {
                 printf("Padre: termina tras un minuto sin hijos ni conexiones.\n");
                 break;
             }
             continue;
         }
 
-        /* Una conexion entrante reinicia la espera del padre. */
         segundos_sin_hijos = 0;
-        sin_size = sizeof(their_addr);
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        if (new_fd == -1)
-        {
+        nuevo_sock = accept(tcp_sock, NULL, NULL);
+        if (nuevo_sock == -1) {
             perror("accept");
             continue;
         }
-
-        /* Recogemos tambien los hijos que terminaron durante select. */
-        while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
+        
+        while (waitpid(-1, NULL, WNOHANG) > 0)
             hijos--;
-
-        if (hijos >= MAX_HIJOS)
-        {
-            /* El puerto 0 indica que no hay lugar para otro cliente. */
-            puerto_red = htons(0);
-            if (send(new_fd, &puerto_red, sizeof(puerto_red), MSG_NOSIGNAL) == -1)
-                perror("send servidor ocupado");
+        if (hijos >= MAX_HIJOS) {
             printf("Servidor ocupado: ya hay %d hijos.\n", MAX_HIJOS);
-            close(new_fd);
+            close(nuevo_sock);
             continue;
         }
 
         pid = fork();
-        if (pid == -1)
-        {
+        if (pid == -1) {
             perror("fork");
-            close(new_fd);
-            continue;
+        } else if (pid == 0) {
+            close(tcp_sock);
+            atender_hijo(nuevo_sock);
+        } else {
+            hijos++;
+            printf("Se creo un hijo. Hijos activos: %d.\n", hijos);
         }
-        if (pid == 0)
-        {
-            close(sockfd);
-            return atender_cliente(new_fd);
-        }
-
-        hijos++;
-        printf("Se creo el hijo %ld. Hijos activos: %d.\n", (long)pid, hijos);
-        close(new_fd);
+        close(nuevo_sock);
     }
-
-    close(sockfd);
+    close(tcp_sock);
     return 0;
 }
