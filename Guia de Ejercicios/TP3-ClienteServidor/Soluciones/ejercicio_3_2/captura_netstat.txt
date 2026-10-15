@@ -1,0 +1,5 @@
+tcp        1      0 0.0.0.0:8024            0.0.0.0:*               LISTEN      20446/ejercicio_3_1 
+tcp        0      0 127.0.0.1:48266         127.0.0.1:8024          FIN_WAIT2   -                   
+tcp        0      0 127.0.0.1:48272         127.0.0.1:8024          ESTABLISHED 20452/ejercicio_3_1 
+tcp        1      0 127.0.0.1:8024          127.0.0.1:48266         CLOSE_WAIT  20446/ejercicio_3_1 
+tcp        0      0 127.0.0.1:8024          127.0.0.1:48272         ESTABLISHED -                   

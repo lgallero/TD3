@@ -1,0 +1,18 @@
+Servidor esperando conexiones en TCP 5024.
+Se creo el hijo 20603. Hijos activos: 1.
+Hijo 20603: puerto UDP 10000.
+Hijo 20603, UDP 10000, 50 bytes: Inicio del sistema.
+Sensor 1: temperatura = 25 C.
+
+Hijo 20603, UDP 10000, 50 bytes: Sensor 2: temperatura = 26 C.
+Comunicacion correct
+Hijo 20603, UDP 10000, 31 bytes: a.
+Fin del registro de prueba.
+
+Hijo 20603: 30 segundos sin datos.
+Hijo 20603: 60 segundos sin datos.
+Hijo 20603: 90 segundos sin datos.
+Hijo 20603: 120 segundos sin datos.
+Hijo 20603: termina por inactividad.
+Termino el hijo 20603. Hijos activos: 0.
+Padre: termina tras un minuto sin hijos ni conexiones.

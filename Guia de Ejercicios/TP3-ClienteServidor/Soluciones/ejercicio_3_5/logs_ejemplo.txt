@@ -1,0 +1,5 @@
+Inicio del sistema.
+Sensor 1: temperatura = 25 C.
+Sensor 2: temperatura = 26 C.
+Comunicacion correcta.
+Fin del registro de prueba.
