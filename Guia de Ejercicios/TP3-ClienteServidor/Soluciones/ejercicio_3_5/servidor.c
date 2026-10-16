@@ -78,23 +78,22 @@ void atender_hijo(int tcp_sock)
         resultado = select(udp_sock + 1, &lectura, NULL, NULL, &tiempo);
 
         if (resultado == -1) {
-            if (errno == EINTR)
-                continue;
-            perror("select hijo");
-            exit(1);
-        }
-        if (resultado == 0) {
+            if (errno != EINTR) {
+                perror("select hijo");
+                exit(1);
+            }
+        } else if (resultado == 0) {
             segundos_sin_datos += INTERVALO;
             printf("Hijo UDP %d: %d segundos sin datos.\n", puerto, segundos_sin_datos);
         } else {
             cantidad = recvfrom(udp_sock, buffer, BLOQUE, 0, NULL, NULL);
             if (cantidad == -1) {
                 perror("recvfrom");
-                continue;
+            } else {
+                buffer[cantidad] = '\0';
+                printf("Hijo UDP %d: %s\n", puerto, buffer);
+                segundos_sin_datos = 0;
             }
-            buffer[cantidad] = '\0';
-            printf("Hijo UDP %d: %s\n", puerto, buffer);
-            segundos_sin_datos = 0;
         }
     }
     printf("Hijo UDP %d: finaliza por inactividad.\n", puerto);
@@ -155,47 +154,43 @@ int main(void)
         resultado = select(tcp_sock + 1, &lectura, NULL, NULL, &tiempo);
 
         if (resultado == -1) {
-            if (errno == EINTR)
-                continue;
-            perror("select padre");
-            break;
-        }
-        if (resultado == 0) {
+            if (errno != EINTR) {
+                perror("select padre");
+                break;
+            }
+        } else if (resultado == 0) {
             if (hijos == 0)
                 segundos_sin_hijos++;
             if (segundos_sin_hijos >= LIMITE_PADRE) {
                 printf("Padre: Fin del programa tras un minuto sin hijos ni conexiones.\n");
                 break;
             }
-            continue;
-        }
-
-        segundos_sin_hijos = 0;
-        nuevo_sock = accept(tcp_sock, NULL, NULL);
-        if (nuevo_sock == -1) {
-            perror("accept");
-            continue;
-        }
-        
-        while (waitpid(-1, NULL, WNOHANG) > 0)
-            hijos--;
-        if (hijos >= MAX_HIJOS) {
-            printf("Servidor ocupado: ya hay %d hijos.\n", MAX_HIJOS);
-            close(nuevo_sock);
-            continue;
-        }
-
-        pid = fork();
-        if (pid == -1) {
-            perror("fork");
-        } else if (pid == 0) {
-            close(tcp_sock);
-            atender_hijo(nuevo_sock);
         } else {
-            hijos++;
-            printf("Se creo un hijo. Hijos activos: %d.\n", hijos);
+            segundos_sin_hijos = 0;
+            nuevo_sock = accept(tcp_sock, NULL, NULL);
+            if (nuevo_sock == -1) {
+                perror("accept");
+            } else {
+                while (waitpid(-1, NULL, WNOHANG) > 0)
+                    hijos--;
+
+                if (hijos >= MAX_HIJOS) {
+                    printf("Servidor ocupado: ya hay %d hijos.\n", MAX_HIJOS);
+                } else {
+                    pid = fork();
+                    if (pid == -1) {
+                        perror("fork");
+                    } else if (pid == 0) {
+                        close(tcp_sock);
+                        atender_hijo(nuevo_sock);
+                    } else {
+                        hijos++;
+                        printf("Se creo un hijo. Hijos activos: %d.\n", hijos);
+                    }
+                }
+                close(nuevo_sock);
+            }
         }
-        close(nuevo_sock);
     }
     close(tcp_sock);
     return 0;
