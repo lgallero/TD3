@@ -22,10 +22,11 @@ int main(int argc, char *argv[])
     struct sockaddr_in direccion;
     FILE *archivo;
 
-    if (argc != 2) {
+    if (argc != 2) {  
         fprintf(stderr, "Uso: %s archivo.txt\n", argv[0]);
         return 1;
     }
+    
     archivo = fopen(argv[1], "r");
     if (archivo == NULL) {
         perror("fopen");

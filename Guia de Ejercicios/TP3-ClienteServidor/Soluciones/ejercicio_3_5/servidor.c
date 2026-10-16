@@ -142,7 +142,7 @@ int main(void)
       
         while (waitpid(-1, NULL, WNOHANG) > 0) {
             hijos--;
-            printf("Termino un hijo. Hijos activos: %d.\n", hijos);
+            printf("Fin de un hijo. Hijos activos: %d.\n", hijos);
         }
         if (hijos > 0)
             segundos_sin_hijos = 0;
@@ -164,7 +164,7 @@ int main(void)
             if (hijos == 0)
                 segundos_sin_hijos++;
             if (segundos_sin_hijos >= LIMITE_PADRE) {
-                printf("Padre: termina tras un minuto sin hijos ni conexiones.\n");
+                printf("Padre: Fin del programa tras un minuto sin hijos ni conexiones.\n");
                 break;
             }
             continue;
