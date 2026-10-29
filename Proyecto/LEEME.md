@@ -3,6 +3,12 @@
 Proyecto académico de Técnicas Digitales III / Redes de Datos - UTN FRH.
 Basado en la estructura de `servinet.c`, `clieinet.c` y `selectest.c`.
 
+## Versión preparada para explicar en clase
+
+La revisión del 28 de octubre de 2026 conserva las reglas y la arquitectura. Se desplegaron las operaciones abreviadas, se agregaron llaves y comentarios de recorrido, y se separaron el registro y la atención de un canal en funciones concretas. La lógica de conexión sigue la secuencia de los ejemplos del docente.
+
+La [guía de lectura del código](GUIA_CODIGO.md) indica por dónde empezar y cómo seguir una jugada completa. La copia anterior está en la carpeta hermana `Proyecto_respaldo_antes_legibilidad_2026-10-28`.
+
 Se generan **dos programas**: `servidor` (master/dealer) y `cliente` (cada
 jugador). Los hijos se crean automáticamente con `fork()`. No se ejecutan
 manualmente y no hay un tercer programa que instalar.
@@ -68,15 +74,21 @@ restaura la terminal al salir o recibir Ctrl+C.
 - Mazo de 52 cartas, cuatro palos y trece valores. Se reconstruye y mezcla
   en cada ronda. Una carta repartida no vuelve al mazo durante esa ronda.
 - A vale 11 o 1; J, Q y K valen 10.
-- Dos cartas iniciales por jugador y dos para el dealer.
-- La segunda carta del dealer permanece oculta hasta resolver la ronda.
+- Dos vueltas de reparto: una carta a cada jugador y por último al dealer
+  en cada vuelta. Al recibir su segunda carta se evalúa la mano del jugador.
+- La primera carta del dealer permanece oculta hasta resolver la ronda;
+  la segunda es visible.
   El master tampoco envía su valor ni el puntaje completo mientras está oculta.
 - Los turnos siguen el orden de los lugares asignados, del 0 al 4.
-- Se puede pedir varias veces hasta plantarse, llegar a 21 o pasarse.
-  Al llegar a 21 se planta automáticamente; al superar 21 pierde y cede turno.
+- Un jugador que ya recibió 21 puntos termina su turno y no puede pedir más.
+  Los demás juegan sus turnos; nunca se consulta una carta futura del mazo
+  para decidir el estado de un jugador ni se pide en su nombre.
+- Después de pedir una carta se evalúa el puntaje: con 21 se planta
+  automáticamente; al superar 21 pierde y cede turno.
 - El dealer pide con menos de 17 y se planta con 17 o más, incluido 17 blando.
 - Blackjack natural (21 con dos cartas) vence a 21 con más cartas. Dos
-  naturales empatan. Si el dealer tiene natural, la ronda se resuelve de inmediato.
+  naturales empatan. La mano del dealer se evalúa al finalizar los turnos,
+  cuando se revela su carta oculta, aunque haya recibido un natural al repartir.
 - Si nadie queda con una mano válida, no hace falta que el dealer siga pidiendo.
 - Sin apuestas, split, double down ni insurance.
 - Cualquier jugador registrado puede iniciar la siguiente ronda con I.

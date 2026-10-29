@@ -130,7 +130,15 @@ En 3.5 se mantiene la forma pedida `sender archivo.txt`: cambiar `HOST` en `send
 
 ## Decisiones sencillas de esta solución
 
-- El puerto UDP se informa como un entero de 2 bytes, con `htons()` y `ntohs()`. El cliente y el servidor usan el mismo formato.
-- En 3.5, el puerto informado vale 0 cuando ya hay 10 hijos. El cliente muestra que el servidor está ocupado y termina. La consigna no fija cómo avisar este caso.
+- En 3.4, el puerto UDP se informa como un entero de 2 bytes, con `htons()` y `ntohs()`. En la versión simplificada de 3.5 se envía como texto con `snprintf()` y se convierte con `atoi()`, siguiendo la resolución del compañero.
+- En 3.5, si ya hay diez hijos, se cierra la conexión sin asignar puerto. El cliente detecta ese cierre y termina con un aviso. La consigna no fija cómo avisar este caso.
 - El padre de 3.5 revisa los hijos terminados cada segundo con `waitpid()`. Esto evita un manejador de señales y permite contar los hijos en el mismo proceso padre. Puede detectar la salida del último hijo hasta aproximadamente un segundo después.
 - No se agregan reintentos ni confirmaciones a UDP. Los ejercicios muestran el envío de datagramas; UDP no garantiza su recepción ni su orden.
+
+## Versión simplificada de 3.5 (15 de octubre de 2026)
+
+El servidor se divide en `buscar_puerto_udp()`, `atender_hijo()` y `main()`. La búsqueda deja reservado el puerto; no se libera para volverlo a abrir. El cliente abre el archivo una sola vez y recibe el puerto como texto hasta que el servidor cierra TCP.
+
+Se usa `printf()` para presentar los logs de texto. El padre conserva el control de hijos con `waitpid()` cada segundo. El cliente mantiene la forma pedida: `sender archivo.txt`.
+
+La versión anterior, su documentación y sus ejecutables se guardaron en `ejercicio_3_5/respaldo_antes_simplificar_2026-10-15/`. Es necesario compilar ambos programas nuevamente: los ejecutables anteriores usan otro formato para comunicar el puerto. Las capturas previas corresponden a esa versión anterior. El estado de revisión de la nueva versión está al inicio de `VERIFICACION.md`.

@@ -1,5 +1,17 @@
 # Verificación de las soluciones
 
+## Estado de la versión simplificada de 3.5 (15 de octubre de 2026)
+
+Se revisó el nuevo cliente y servidor contra la consigna y contra la versión anterior. Se mantienen TCP 5024, el límite de diez hijos, los puertos UDP desde 10000, los bloques de 50 bytes, los intervalos de 30 segundos y los cierres por inactividad. El puerto ahora se transmite como texto.
+
+Se comprobó por lectura que el socket UDP queda reservado antes de anunciarlo, que el cliente recibe hasta el cierre de TCP, que no duerme después del último envío y que el padre recoge todos los hijos terminados. No se compiló ni ejecutó esta nueva versión: este entorno Windows no tiene un compilador y entorno de ejecución Linux disponibles. El GCC localizado corresponde a Windows.
+
+Para verificarla en Linux, recompilar ambos archivos con las instrucciones del README y repetir la prueba del archivo de 131 bytes. También conviene conectar varios clientes a la vez y comprobar el rechazo del número once. Los ejecutables anteriores se guardaron en el respaldo para evitar confundirlos con esta versión.
+
+## Registro histórico anterior a la simplificación
+
+Las pruebas y capturas que siguen corresponden al código anterior; no acreditan la compilación ni la ejecución de la nueva versión de 3.5. Los ejercicios 3.1 a 3.4 no fueron modificados.
+
 Pruebas realizadas en Linux el 14 de octubre de 2026. Se ejecutaron los programas como procesos independientes sobre IPv4 local (`127.0.0.1`). No se realizó una prueba entre computadoras físicas distintas.
 
 ## Compilación

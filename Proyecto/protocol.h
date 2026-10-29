@@ -7,9 +7,17 @@
 #define TAM_COLA 32768
 
 /* Cada descriptor conserva su propia linea incompleta. */
-typedef struct { char datos[TAM_LINEA]; size_t usados; } Receptor;
+typedef struct
+{
+    char datos[TAM_LINEA];
+    size_t usados;
+} Receptor;
 /* Cola pequena y acotada para no bloquear a todos por un cliente lento. */
-typedef struct { char datos[TAM_COLA]; size_t usados; } Salida;
+typedef struct
+{
+    char datos[TAM_COLA];
+    size_t usados;
+} Salida;
 
 /* 1: linea lista sin '\n'; 2: incompleta; 0: cierre; -1: error. */
 int recibir_linea(int descriptor, Receptor *receptor, char *linea);

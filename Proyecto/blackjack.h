@@ -7,16 +7,39 @@
 #define MAX_CARTAS 12
 #define TAM_NOMBRE 32
 
-typedef struct { int valor; int palo; } Carta;
+typedef struct
+{
+    int valor;
+    int palo;
+} Carta;
 
-enum EstadoJugador {
-    JUGADOR_VACIO, JUGADOR_ESPERANDO, JUGADOR_LISTO, JUGADOR_JUGANDO,
-    JUGADOR_PLANTADO, JUGADOR_PASADO, JUGADOR_DESCONECTADO
+enum EstadoJugador
+{
+    JUGADOR_VACIO,
+    JUGADOR_ESPERANDO,
+    JUGADOR_LISTO,
+    JUGADOR_JUGANDO,
+    JUGADOR_PLANTADO,
+    JUGADOR_PASADO,
+    JUGADOR_DESCONECTADO
 };
-enum EstadoRonda { SIN_RONDA, RONDA_ACTIVA, RONDA_TERMINADA };
-enum Resultado { SIN_RESULTADO, GANA, PIERDE, EMPATA, ANULADA };
+enum EstadoRonda
+{
+    SIN_RONDA,
+    RONDA_ACTIVA,
+    RONDA_TERMINADA
+};
+enum Resultado
+{
+    SIN_RESULTADO,
+    GANA,
+    PIERDE,
+    EMPATA,
+    ANULADA
+};
 
-typedef struct {
+typedef struct
+{
     int id;
     char nombre[TAM_NOMBRE];
     int conectado;
@@ -27,7 +50,8 @@ typedef struct {
     int resultado;
 } Jugador;
 
-typedef struct {
+typedef struct
+{
     Carta mano[MAX_CARTAS];
     int cantidad_cartas;
 } Dealer;

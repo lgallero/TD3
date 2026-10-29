@@ -18,7 +18,7 @@ Se tomaron las consignas de [TP3.pdf](../TP3.pdf), páginas impresas 11 y 12, y 
 
 Los ejemplos son la base del estilo, y las consignas del TP3 definen los requisitos. Se agregaron `select()` y el control de hijos para cumplir las partes que no están resueltas en los ejemplos. Las presentaciones entregadas no contienen un desarrollo de `select()`.
 
-No se usan hilos, clases, memoria dinámica, bibliotecas externas ni un sistema de funciones genéricas. En 3.4 y 3.5 solamente se separó la atención del hijo en `atender_cliente()` para que el recorrido del padre sea fácil de seguir.
+No se usan hilos, clases, memoria dinámica, bibliotecas externas ni un sistema de funciones genéricas. En 3.4 se separó la atención del hijo en `atender_cliente()`. En la versión simplificada de 3.5 se usan `buscar_puerto_udp()` y `atender_hijo()`.
 
 Se hicieron ajustes pequeños para que los programas sean correctos al compilarlos y ejecutarlos: declarar los encabezados necesarios, inicializar las estructuras, cargar el tamaño antes de `accept()`, reservar los límites de los buffers y cerrar los descriptores que cada proceso no necesita.
 
@@ -54,9 +54,9 @@ En el cliente se coloca la dirección del servidor en lugar de `INADDR_ANY`. `ge
 
 TCP entrega un flujo de bytes: una llamada a `recv()` puede recibir solo una parte de lo enviado. Por eso el cliente 3.1 lee hasta el salto de línea y el servidor 3.4 acumula los tres bytes de `FIN`.
 
-El puerto UDP tiene un formato fijo de dos bytes. El cliente lo recibe con `MSG_WAITALL`, comprueba que recibió los dos y aplica `ntohs()`.
+En 3.4, el puerto UDP tiene un formato fijo de dos bytes. El cliente lo recibe con `MSG_WAITALL`, comprueba que recibió los dos y aplica `ntohs()`. En 3.5 se envía como texto y el cliente usa `recv()` hasta el cierre de TCP; luego lo convierte con `atoi()`.
 
-Cuando se envían cadenas por TCP se repite `send()` si faltó una parte. `MSG_NOSIGNAL` evita que una escritura a un cliente que se desconectó termine al servidor por `SIGPIPE`; en ese caso se puede detectar el error de `send()`.
+En los ejercicios anteriores se repite `send()` si faltó una parte de una cadena y se usa `MSG_NOSIGNAL` para detectar desconexiones sin terminar por `SIGPIPE`. En el servidor simplificado de 3.5 se ignora `SIGPIPE` con `signal()`: el envío corto del puerto se comprueba y, si no sale completo, ese hijo termina.
 
 ## Ejercicio 3.1: un cliente por vez
 
@@ -148,12 +148,20 @@ Se conserva la estructura de 3.4, con estos cambios:
 | Escucha inicial | TCP 5024. |
 | Máximo de hijos | Contador del padre y constante `MAX_HIJOS`, inicialmente 10. |
 | Puerto UDP de cada hijo | Primer puerto libre desde 10000, reservado con `bind()`. |
-| Uso de TCP | Informar el puerto; luego se cierra. |
+| Uso de TCP | Informar el puerto como texto; luego se cierra. |
 | Destino de los datos | Pantalla del servidor, identificando hijo y puerto. |
 | Espera del hijo | `select()` con intervalos de 30 segundos. |
 | Fin del hijo | 120 segundos continuos sin recibir datos. |
 | Fin del padre | 60 segundos sin hijos y sin conexiones entrantes. |
 | Cliente | `sender archivo.txt`; bloques de hasta 50 bytes, uno cada 30 segundos. |
+
+### Las funciones del servidor simplificado
+
+- `buscar_puerto_udp(udp_sock)`: prueba `bind()` desde 10000 y devuelve el primer puerto reservado. Usa el socket que recibe por argumento y lo deja abierto.
+- `atender_hijo(tcp_sock)`: crea el socket UDP, llama a la búsqueda, informa el puerto con `snprintf()` y `send()`, cierra TCP y recibe los logs.
+- `main()`: prepara TCP, acepta clientes, crea los hijos y controla el límite y el tiempo de cierre del padre.
+
+El cliente recibe el número cuando UDP ya está preparado. Los logs se imprimen con `printf()` después de agregar el terminador `\0`; esta versión está pensada para texto sin caracteres nulos dentro de los mensajes.
 
 ### La espera del hijo
 
@@ -168,7 +176,7 @@ No se suman silencios separados por mensajes. Por ejemplo, si un mensaje llega t
 Solo el padre modifica `hijos`: lo incrementa cuando crea un hijo y lo decrementa por cada hijo terminado que recoge con:
 
 ```c
-while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
+while (waitpid(-1, NULL, WNOHANG) > 0)
     hijos--;
 ```
 
@@ -176,7 +184,7 @@ while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
 
 En este ejercicio no se ignora `SIGCHLD`: necesitamos recuperar el estado de salida con `waitpid()` para actualizar el contador. El hijo tampoco modifica ese contador: después de `fork()` su variable sería una copia, no la del padre.
 
-Si ya hay diez hijos activos, se informa puerto 0 y se cierra esa conexión. No se crea un hijo número once. Los lugares se recuperan cuando terminan los hijos anteriores.
+Si ya hay diez hijos activos, se cierra la conexión sin informar un puerto. El cliente detecta que TCP cerró sin datos y termina con un aviso. No se crea un hijo número once. Los lugares se recuperan cuando terminan los hijos anteriores.
 
 ### El minuto sin actividad del padre
 
@@ -195,15 +203,15 @@ Por la revisión periódica, el padre puede detectar la salida del último hijo 
 
 La dirección del servidor se define en `HOST` para respetar la ejecución con un solo argumento, el archivo.
 
-El cliente comprueba que puede abrir el archivo, establece TCP y recibe los dos bytes del puerto UDP. Después cierra TCP, abre el archivo para recorrerlo y crea los datagramas:
+El cliente abre el archivo una sola vez y establece TCP. Recibe el puerto como texto hasta que el servidor cierra la conexión, agrega el terminador de cadena y usa `atoi()` para obtener el número. El bucle de recepción permite recibir el número aunque TCP lo entregue en partes. Luego crea el socket UDP y lee el archivo:
 
 ```c
-cantidad = fread(buf, 1, BLOQUE, archivo);
+cantidad = fread(buffer, 1, BLOQUE, archivo);
 ```
 
 `cantidad` es el número real de bytes leídos, entre 0 y 50. Se envían esos bytes, de modo que el último bloque puede tener menos de 50.
 
-El primer bloque sale inmediatamente. Antes de cada envío siguiente se espera con `sleep(30)`. Si ya no hay más bloques, el cliente termina sin agregar una espera final. Un archivo vacío no produce datagramas.
+La lectura está en la condición del `while`, como en la resolución del compañero. La variable `primer_bloque` evita la demora inicial: el primer bloque sale inmediatamente; antes de cada envío siguiente se espera con `sleep(30)`. Si ya no hay más bloques, el cliente termina sin agregar una espera final. Un archivo vacío no produce datagramas.
 
 ### Ejemplo de tiempos
 
