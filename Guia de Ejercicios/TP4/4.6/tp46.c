@@ -22,7 +22,7 @@
 #define BITS 8
 #define BLOQUE (FRECUENCIA * CANALES / 50)          /* Tomo 20 ms de audio por bloque. */
 #define RETARDO (FRECUENCIA * CANALES * 300 / 1000)  /* Uso un retardo de 300 ms. */
-#define RETARDO_ECO (512 * CANALES)
+#define RETARDO_ECO (FRECUENCIA * CANALES * 1000 / 1000)
 #define SILENCIO 128
 #define LIMITE_MS 500
 #define REVISION_MS 20
